@@ -1,16 +1,14 @@
 #include "../include/compressor.h"
 
 #include <algorithm>
+#include <cassert>
 #include <cmath>
 
 namespace codec {
 
-FloatQuantizer::FloatQuantizer(float scale) : scale_(scale) {
-}
-
 void FloatQuantizer::Encode(std::span<const float> input,
-                           std::span<std::int16_t> output) const {
-  assert(input.size() <= output.size());  // Проверка размера массива
+                            std::span<std::int16_t> output) const {
+  assert(input.size() <= output.size());
 
   for (std::size_t i = 0; i < input.size(); ++i) {
     float scaled_value = input[i] * scale_;
@@ -24,8 +22,8 @@ void FloatQuantizer::Encode(std::span<const float> input,
 }
 
 void FloatQuantizer::Decode(std::span<const std::int16_t> input,
-                           std::span<float> output) const {
-  assert(input.size() <= output.size());  // Проверка размера массива
+                            std::span<float> output) const {
+  assert(input.size() <= output.size());
 
   const float inv_scale = 1.0f / scale_;
   for (std::size_t i = 0; i < input.size(); ++i) {

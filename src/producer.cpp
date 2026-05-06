@@ -1,6 +1,6 @@
+#include <fstream>  // Добавлено для работы с файлами
 #include <iostream>
 #include <vector>
-#include <fstream>  // Добавлено для работы с файлами
 
 #include "../include/compressor.h"
 #include "../include/metrics.h"
@@ -8,7 +8,8 @@
 #include "../include/shm_ring_buffer.h"
 
 // Чтение float-файлов
-inline bool ReadFloatFile(const std::string& filename, std::vector<float>* data) {
+inline bool ReadFloatFile(const std::string& filename,
+                          std::vector<float>* data) {
   std::ifstream file(filename, std::ios::binary);
   if (!file) {
     std::cerr << "Error opening file: " << filename << std::endl;
@@ -24,7 +25,8 @@ inline bool ReadFloatFile(const std::string& filename, std::vector<float>* data)
 }
 
 // Чтение float-файлов
-inline bool WriteFloatFile(const std::string& filename, const std::vector<float>& data) {
+inline bool WriteFloatFile(const std::string& filename,
+                           const std::vector<float>& data) {
   std::ofstream file(filename, std::ios::binary);
   if (!file) {
     std::cerr << "Error creating file: " << filename << std::endl;
@@ -78,7 +80,7 @@ int main(int argc, char** argv) {
     std::memcpy(item + packet::kHeaderSize, encoded.data(), count * 2);
 
     comp_bytes += packet::kHeaderSize + count * 2;
-    ring.Push({reinterpret_cast<std::uint8_t*>(item), packet::kItemSize});  
+    ring.Push({reinterpret_cast<std::uint8_t*>(item), packet::kItemSize});
 
     // Завершаем передачу пустым пакетом
     if (seq == total_chunks - 1) {

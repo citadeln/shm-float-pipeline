@@ -1,7 +1,7 @@
+#include <fstream>
 #include <iostream>
 #include <unordered_map>
 #include <vector>
-#include <fstream>
 
 #include "../include/compressor.h"
 #include "../include/metrics.h"
@@ -9,7 +9,8 @@
 #include "../include/shm_ring_buffer.h"
 
 // Чтение float-файлов
-inline bool ReadFloatFile(const std::string& filename, std::vector<float>* data) {
+inline bool ReadFloatFile(const std::string& filename,
+                          std::vector<float>* data) {
   std::ifstream file(filename, std::ios::binary);
   if (!file) {
     std::cerr << "Error opening file: " << filename << std::endl;
@@ -25,7 +26,8 @@ inline bool ReadFloatFile(const std::string& filename, std::vector<float>* data)
 }
 
 // Запись float-файлов
-inline bool WriteFloatFile(const std::string& filename, const std::vector<float>& data) {
+inline bool WriteFloatFile(const std::string& filename,
+                           const std::vector<float>& data) {
   std::ofstream file(filename, std::ios::binary);
   if (!file) {
     std::cerr << "Error creating file: " << filename << std::endl;
@@ -87,7 +89,8 @@ int main(int argc, char** argv) {
   WriteFloatFile(argv[2], output);
 
   auto ms = metrics.ElapsedMs();
-  double loss = metrics.LossPercent(original.data(), output.data(), original.size());
+  double loss =
+      metrics.LossPercent(original.data(), output.data(), original.size());
   std::cout << "Consumer: " << ms << "ms, loss: " << loss << "%\n";
 
   ring.Close();
