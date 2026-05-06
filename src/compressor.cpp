@@ -1,17 +1,36 @@
-#include "compressor.h"
+#include "../include/compressor.h"
 
-#include <iostream>
-#include <string>
-#include <vector>
+#include <algorithm>
+#include <cmath>
 
-#include "../include/shm_ring_buffer.h"
-#include "metrics.h"
+namespace codec {
 
-namespace {
+FloatQuantizer::FloatQuantizer(float scale) : scale_(scale) {
+}
 
-struct ShmItem {
-  std::uint32_t count;
-  std::int16_t data[120];
-};
+void FloatQuantizer::Encode(std::span<const float> input,
+                           std::span<std::int16_t> output) const {
+  assert(input.size() <= output.size());  // Проверка размера массива
 
-}  // namespace
+  for (std::size_t i = 0; i < input.size(); ++i) {
+    float scaled_value = input[i] * scale_;
+    if (scaled_value > kInt16Max) {
+      scaled_value = kInt16Max;
+    } else if (scaled_value < kInt16Min) {
+      scaled_value = kInt16Min;
+    }
+    output[i] = static_cast<std::int16_t>(std::round(scaled_value));
+  }
+}
+
+void FloatQuantizer::Decode(std::span<const std::int16_t> input,
+                           std::span<float> output) const {
+  assert(input.size() <= output.size());  // Проверка размера массива
+
+  const float inv_scale = 1.0f / scale_;
+  for (std::size_t i = 0; i < input.size(); ++i) {
+    output[i] = static_cast<float>(input[i]) * inv_scale;
+  }
+}
+
+}  // namespace codec

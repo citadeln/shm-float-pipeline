@@ -1,11 +1,41 @@
-#include <atomic>
 #include <iostream>
 #include <vector>
+#include <fstream>  // Добавлено для работы с файлами
 
 #include "../include/compressor.h"
 #include "../include/metrics.h"
 #include "../include/packet.h"
 #include "../include/shm_ring_buffer.h"
+
+// Чтение float-файлов
+inline bool ReadFloatFile(const std::string& filename, std::vector<float>* data) {
+  std::ifstream file(filename, std::ios::binary);
+  if (!file) {
+    std::cerr << "Error opening file: " << filename << std::endl;
+    return false;
+  }
+
+  data->clear();
+  float value;
+  while (file.read(reinterpret_cast<char*>(&value), sizeof(float))) {
+    data->push_back(value);
+  }
+  return true;
+}
+
+// Чтение float-файлов
+inline bool WriteFloatFile(const std::string& filename, const std::vector<float>& data) {
+  std::ofstream file(filename, std::ios::binary);
+  if (!file) {
+    std::cerr << "Error creating file: " << filename << std::endl;
+    return false;
+  }
+
+  for (float value : data) {
+    file.write(reinterpret_cast<const char*>(&value), sizeof(float));
+  }
+  return true;
+}
 
 int main(int argc, char** argv) {
   if (argc < 2) {
@@ -14,14 +44,14 @@ int main(int argc, char** argv) {
   }
 
   std::vector<float> input;
-  if (!utils::ReadFloatFile(argv[1], &input)) {
+  if (!ReadFloatFile(argv[1], &input)) {
     return 1;
   }
 
-  Metrics metrics;
+  metrics::Metrics metrics;
   metrics.Start();
 
-  ShmRingBuffer ring;
+  shm::ShmRingBuffer ring;
   if (!ring.InitProducer()) {
     return 1;
   }
@@ -30,7 +60,7 @@ int main(int argc, char** argv) {
   std::uint32_t msg_id = 0;
   std::uint32_t total_chunks = (input.size() + packet::kMaxFloatPerChunk - 1) /
                                packet::kMaxFloatPerChunk;
-  FloatQuantizer quantizer;
+  codec::FloatQuantizer quantizer;
 
   alignas(16) char item[256];
   std::vector<std::int16_t> encoded(packet::kMaxFloatPerChunk);
@@ -43,16 +73,26 @@ int main(int argc, char** argv) {
     quantizer.Encode({input.data() + seq * packet::kMaxFloatPerChunk, count},
                      encoded);
 
-    packet::ChunkHeader eof{0, 0, 0, 0, 0xFFFF};
-    std::memcpy(item, &eof, packet::kHeaderSize);
-    alignas(16) char item[256];
-    ring.Push(item, sizeof(item));  // Вместо span
-    ring.Pop(item, sizeof(item));
+    packet::ChunkHeader hdr{msg_id, seq, total_chunks, count * 2};
+    std::memcpy(item, &hdr, packet::kHeaderSize);
+    std::memcpy(item + packet::kHeaderSize, encoded.data(), count * 2);
 
-    auto ms = metrics.ElapsedMs();
-    std::cout << "Producer: " << ms << "ms, ratio: "
-              << metrics.CompressionRatio(orig_bytes, comp_bytes) << "\n";
+    comp_bytes += packet::kHeaderSize + count * 2;
+    ring.Push({reinterpret_cast<std::uint8_t*>(item), packet::kItemSize});  
 
-    ring.Cleanup();  // shm_unlink + sem_unlink
-    return 0;
+    // Завершаем передачу пустым пакетом
+    if (seq == total_chunks - 1) {
+      packet::ChunkHeader eof{0, 0, 0, 0, 0xFFFF};
+      std::memcpy(item, &eof, packet::kHeaderSize);
+      ring.Push({reinterpret_cast<std::uint8_t*>(item), packet::kHeaderSize});
+    }
   }
+
+  auto ms = metrics.ElapsedMs();
+  std::cout << "Producer: " << ms
+            << "ms, ratio: " << metrics.CompressionRatio(orig_bytes, comp_bytes)
+            << "\n";
+
+  ring.Cleanup();
+  return 0;
+}

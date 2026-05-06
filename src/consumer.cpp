@@ -1,11 +1,42 @@
 #include <iostream>
 #include <unordered_map>
 #include <vector>
+#include <fstream>
 
 #include "../include/compressor.h"
 #include "../include/metrics.h"
 #include "../include/packet.h"
 #include "../include/shm_ring_buffer.h"
+
+// Чтение float-файлов
+inline bool ReadFloatFile(const std::string& filename, std::vector<float>* data) {
+  std::ifstream file(filename, std::ios::binary);
+  if (!file) {
+    std::cerr << "Error opening file: " << filename << std::endl;
+    return false;
+  }
+
+  data->clear();
+  float value;
+  while (file.read(reinterpret_cast<char*>(&value), sizeof(float))) {
+    data->push_back(value);
+  }
+  return true;
+}
+
+// Запись float-файлов
+inline bool WriteFloatFile(const std::string& filename, const std::vector<float>& data) {
+  std::ofstream file(filename, std::ios::binary);
+  if (!file) {
+    std::cerr << "Error creating file: " << filename << std::endl;
+    return false;
+  }
+
+  for (float value : data) {
+    file.write(reinterpret_cast<const char*>(&value), sizeof(float));
+  }
+  return true;
+}
 
 int main(int argc, char** argv) {
   if (argc < 3) {
@@ -14,15 +45,15 @@ int main(int argc, char** argv) {
   }
 
   std::vector<float> original;
-  utils::ReadFloatFile(argv[1], &original);
+  ReadFloatFile(argv[1], &original);
 
-  Metrics metrics;
+  metrics::Metrics metrics;
   metrics.Start();
 
-  ShmRingBuffer ring;
+  shm::ShmRingBuffer ring;
   if (!ring.InitConsumer()) return 1;
 
-  FloatQuantizer quantizer;
+  codec::FloatQuantizer quantizer;
   std::unordered_map<std::uint32_t, std::vector<float>> reassembly;
   std::vector<std::int16_t> encoded(packet::kMaxFloatPerChunk);
 
@@ -47,17 +78,16 @@ int main(int argc, char** argv) {
               msg.begin() + hdr.chunk_seq * packet::kMaxFloatPerChunk);
   }
 
-  // Flatten all messages to output
+  // Объединяем все сообщения в выходной вектор
   std::vector<float> output;
   for (auto& [id, chunks] : reassembly) {
     output.insert(output.end(), chunks.begin(), chunks.end());
   }
 
-  utils::WriteFloatFile(argv[2], output);
+  WriteFloatFile(argv[2], output);
 
   auto ms = metrics.ElapsedMs();
-  double loss =
-      metrics.LossPercent(original.data(), output.data(), original.size());
+  double loss = metrics.LossPercent(original.data(), output.data(), original.size());
   std::cout << "Consumer: " << ms << "ms, loss: " << loss << "%\n";
 
   ring.Close();

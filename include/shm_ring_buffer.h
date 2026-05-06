@@ -1,6 +1,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <span>
 
 namespace shm {
 
@@ -22,7 +23,7 @@ class RingBuffer {
 
   bool InitProducer();
   bool InitConsumer();
-  bool Push(std::span<const std::uint8_t>);
+  bool Push(std::span<const std::uint8_t>); 
   bool Pop(std::span<std::uint8_t>);
   void Cleanup();
 
