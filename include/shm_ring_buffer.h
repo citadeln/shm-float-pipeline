@@ -1,7 +1,6 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
-#include <span>
 
 namespace shm {
 
@@ -32,9 +31,8 @@ class RingBuffer {
   void* addr_ = nullptr;
   Header* header_ = nullptr;
   std::uint8_t* data_ = nullptr;
-  
+
   void* sem_empty_ = nullptr;
   void* sem_full_ = nullptr;
 };
-
 }  // namespace shm

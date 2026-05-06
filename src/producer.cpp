@@ -1,13 +1,11 @@
 #include <atomic>
 #include <iostream>
-#include <span>
 #include <vector>
 
-#include "shm_ring.h"
-#include "compressor.h"
-#include "packet.h"
-#include "metrics.h"
-#include "utils.h"
+#include "../include/compressor.h"
+#include "../include/metrics.h"
+#include "../include/packet.h"
+#include "../include/shm_ring_buffer.h"
 
 int main(int argc, char** argv) {
   if (argc < 2) {
@@ -30,35 +28,31 @@ int main(int argc, char** argv) {
 
   // Producer логика: chunking + compress
   std::uint32_t msg_id = 0;
-  std::uint32_t total_chunks = (input.size() + packet::kMaxFloatPerChunk - 1) / packet::kMaxFloatPerChunk;
+  std::uint32_t total_chunks = (input.size() + packet::kMaxFloatPerChunk - 1) /
+                               packet::kMaxFloatPerChunk;
   FloatQuantizer quantizer;
-  
+
   alignas(16) char item[256];
   std::vector<std::int16_t> encoded(packet::kMaxFloatPerChunk);
   std::size_t orig_bytes = input.size() * 4;
   std::size_t comp_bytes = 0;
 
   for (std::uint32_t seq = 0; seq < total_chunks; ++seq) {
-    auto count = std::min(packet::kMaxFloatPerChunk, input.size() - seq * packet::kMaxFloatPerChunk);
-    quantizer.Encode({input.data() + seq * packet::kMaxFloatPerChunk, count}, encoded);
-    
-    packet::ChunkHeader hdr{msg_id++, seq, total_chunks, static_cast<std::uint16_t>(count)};
-    std::memcpy(item, &hdr, packet::kHeaderSize);
-    std::memcpy(item + packet::kHeaderSize, encoded.data(), count * 2);
-    
-    ring.Push({reinterpret_cast<std::uint8_t*>(item), packet::kItemSize});
-    comp_bytes += packet::kItemSize;
+    auto count = std::min(packet::kMaxFloatPerChunk,
+                          input.size() - seq * packet::kMaxFloatPerChunk);
+    quantizer.Encode({input.data() + seq * packet::kMaxFloatPerChunk, count},
+                     encoded);
+
+    packet::ChunkHeader eof{0, 0, 0, 0, 0xFFFF};
+    std::memcpy(item, &eof, packet::kHeaderSize);
+    alignas(16) char item[256];
+    ring.Push(item, sizeof(item));  // Вместо span
+    ring.Pop(item, sizeof(item));
+
+    auto ms = metrics.ElapsedMs();
+    std::cout << "Producer: " << ms << "ms, ratio: "
+              << metrics.CompressionRatio(orig_bytes, comp_bytes) << "\n";
+
+    ring.Cleanup();  // shm_unlink + sem_unlink
+    return 0;
   }
-
-  // EOF chunk
-  packet::ChunkHeader eof{0, 0, 0, 0, 0xFFFF};
-  std::memcpy(item, &eof, packet::kHeaderSize);
-  ring.Push({reinterpret_cast<std::uint8_t*>(item), packet::kHeaderSize});
-
-  auto ms = metrics.ElapsedMs();
-  std::cout << "Producer: " << ms << "ms, ratio: " 
-            << metrics.CompressionRatio(orig_bytes, comp_bytes) << "\n";
-
-  ring.Cleanup();  // shm_unlink + sem_unlink
-  return 0;
-}

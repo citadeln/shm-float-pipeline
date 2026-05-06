@@ -1,11 +1,11 @@
+#include "compressor.h"
+
 #include <iostream>
 #include <string>
 #include <vector>
 
-#include "compressor.h"
+#include "../include/shm_ring_buffer.h"
 #include "metrics.h"
-#include "shared_memory.h"
-#include "utils.h"
 
 namespace {
 
@@ -15,7 +15,3 @@ struct ShmItem {
 };
 
 }  // namespace
-
-int main(int argc, char** argv) {
-
-}

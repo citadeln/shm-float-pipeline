@@ -18,7 +18,8 @@ class Timer {
   std::chrono::high_resolution_clock::time_point start_;
 };
 
-double CompressionRatio(std::size_t original_bytes, std::size_t compressed_bytes);
+double CompressionRatio(std::size_t original_bytes,
+                        std::size_t compressed_bytes);
 
 double LossPercent(const float* original, const float* reconstructed,
                    std::size_t count);
