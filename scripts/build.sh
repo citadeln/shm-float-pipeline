@@ -33,3 +33,7 @@ fi
 make -j$(nproc)
 
 echo "SUCCESS!"
+echo "-------------------------------"
+echo "developer: Anastasiya Dorokhina"
+echo "tg: @citadeln"
+echo "-------------------------------"
