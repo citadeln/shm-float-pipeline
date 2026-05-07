@@ -13,20 +13,20 @@ struct alignas(4) Header {
   std::uint32_t magic = 0xDEADBEEF;
 };
 
-constexpr size_t kShmSize = 256;
+constexpr size_t kShmSize = 256;  // 256 байт по ТЗ
 constexpr size_t kDataOffset = sizeof(Header);
-constexpr size_t kItemSize = 64;  // ChunkHeader + 24 int16
+constexpr size_t kItemSize = 64;  // 16 header + 48 payload
 
 class RingBuffer {
  public:
-  RingBuffer() = default;
+  RingBuffer() noexcept;
   ~RingBuffer();
 
-  bool InitProducer();
-  bool InitConsumer();
-  bool Push(std::span<const std::uint8_t>);
-  bool Pop(std::span<std::uint8_t>);
-  void Cleanup();
+  [[nodiscard]] bool InitProducer() noexcept;
+  [[nodiscard]] bool InitConsumer() noexcept;
+  [[nodiscard]] bool Push(std::span<const std::uint8_t> item) noexcept;
+  [[nodiscard]] bool Pop(std::span<std::uint8_t> item) noexcept;
+  void Cleanup() noexcept;
 
  private:
   int fd_ = -1;

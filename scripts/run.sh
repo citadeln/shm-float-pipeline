@@ -1,7 +1,6 @@
 #!/bin/bash
 
-./build.sh
 cd build
-./producer ../data/input.bin & 
+./producer ../data/sample.bin & 
 sleep 1
-./consumer ../data/input.bin ../data/output.bin
+./consumer ../data/sample.bin ../data/output.bin

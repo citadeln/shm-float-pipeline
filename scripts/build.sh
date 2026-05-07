@@ -33,4 +33,3 @@ fi
 make -j$(nproc)
 
 echo "SUCCESS!"
-echo "./producer ../data/input.bin &"
