@@ -1,10 +1,15 @@
 # Высокопроизводительный канал сжатых данных
 
-## Сборка и запуск проекта
+
+
+## Сборка проекта
 ```bash
-git clone . && cd shm-float-pipeline
-./build.sh          # Format + build + test
-./run.sh
+./scripts/build.sh
+```
+
+## Запуск проекта
+```bash
+./scripts/run.sh
 ```
 
 ## Структура проекта

@@ -62,8 +62,7 @@ int main(int argc, char** argv) {
     packet::ChunkHeader hdr{msg_id, seq, total_chunks,
                             static_cast<uint16_t>(count * 2)};
     memcpy(item, &hdr, packet::kHeaderSize);
-    memcpy(item + packet::kHeaderSize, encoded.data(),
-           count * sizeof(int16_t));
+    memcpy(item + packet::kHeaderSize, encoded.data(), count * sizeof(int16_t));
 
     comp_bytes += packet::kHeaderSize + count * sizeof(int16_t);
     ring.Push({reinterpret_cast<std::uint8_t*>(item), packet::kItemSize});
@@ -75,8 +74,7 @@ int main(int argc, char** argv) {
   ring.Push({reinterpret_cast<std::uint8_t*>(item), packet::kHeaderSize});
 
   std::cout << "Producer: " << timer.ElapsedMillis() << "ms, ratio: "
-            << metrics::CompressionRatio(orig_bytes, comp_bytes)
-            << "\n"; 
+            << metrics::CompressionRatio(orig_bytes, comp_bytes) << "\n";
 
   ring.Cleanup();
   return 0;
