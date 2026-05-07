@@ -16,8 +16,11 @@ sleep 1
 # Ждем завершения фонового процесса Producer (на всякий случай)
 wait $producer_pid 2>/dev/null || true
 
-echo "--- ЗАПУСК ЮНИТ-ТЕСТОВ ---"
-./../tests/test_utils
-# ctest
+echo "--- START TESTS ---"
+./test_utils
+echo "--- END TESTS ---"
 
-echo "--- СКРИПТ ЗАВЕРШЕН УСПЕШНО ---"
+#cd build
+#strace -f ./consumer ... 2>&1 | head -n 50
+#journalctl -ke | tail -n 50
+#tail -n 50 /var/log/syslog
