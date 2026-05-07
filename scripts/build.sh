@@ -15,3 +15,7 @@ cmake -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_STANDARD=20 ..
 make -j$(nproc)
 
 echo "SUCCESS!"
+echo "-------------------------------"
+echo "developer: Anastasiya Dorokhina"
+echo "tg: @citadeln"
+echo "-------------------------------"
