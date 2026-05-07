@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(TestTask LANGUAGES CXX)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
@@ -11,20 +11,12 @@ elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   add_compile_options(-Wall -Wextra -Wpedantic -march=native)
 endif()
 
-add_executable(producer 
-  src/core/producer.cpp 
-  src/core/shm_ring_buffer.cpp 
-  src/core/compressor.cpp 
-  src/core/metrics.cpp
-)
+add_executable(producer src/core/producer.cpp src/core/shm_ring_buffer.cpp
+                        src/core/compressor.cpp src/core/metrics.cpp)
 target_include_directories(producer PRIVATE include)
 target_link_libraries(producer PRIVATE pthread rt)
 
-add_executable(consumer 
-  src/core/consumer.cpp 
-  src/core/shm_ring_buffer.cpp 
-  src/core/compressor.cpp 
-  src/core/metrics.cpp
-)
+add_executable(consumer src/core/consumer.cpp src/core/shm_ring_buffer.cpp
+                        src/core/compressor.cpp src/core/metrics.cpp)
 target_include_directories(consumer PRIVATE include)
 target_link_libraries(consumer PRIVATE pthread rt)

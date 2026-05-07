@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -53,7 +54,8 @@ int main(int argc, char** argv) {
   packet::ChunkHeader hdr;
 
   while (true) {
-    ring.Pop({reinterpret_cast<std::uint8_t*>(item), packet::kItemSize});
+    ring.Pop(std::span<std::uint8_t>{reinterpret_cast<std::uint8_t*>(item),
+                                     packet::kItemSize});
     memcpy(&hdr, item, packet::kHeaderSize);
 
     if (hdr.eof_flag == 0xFFFF) break;
@@ -63,16 +65,16 @@ int main(int argc, char** argv) {
         static_cast<std::size_t>(hdr.payload_len / 2)};
 
     std::vector<float> decoded(payload.size());
-    quantizer.Decode(payload, {decoded.data(), decoded.size()});
+    quantizer.Decode(payload, std::span<float>{decoded.data(), decoded.size()});
 
-    auto& msg = reassembly[hdr.msg_id];
-    msg.resize(hdr.total_chunks * packet::kMaxFloatPerChunk);
+    auto& chunks = reassembly[hdr.msg_id];
+    chunks.resize(hdr.total_chunks * packet::kMaxFloatPerChunk);
     std::copy(decoded.begin(), decoded.end(),
-              msg.begin() + hdr.chunk_seq * packet::kMaxFloatPerChunk);
+              chunks.begin() + hdr.chunk_seq * packet::kMaxFloatPerChunk);
   }
 
   std::vector<float> output;
-  for (auto& [id, chunks] : reassembly) {
+  for (const auto& [id, chunks] : reassembly) {
     output.insert(output.end(), chunks.begin(), chunks.end());
   }
 

@@ -30,7 +30,7 @@ bool RingBuffer::InitProducer() {
 }
 
 bool RingBuffer::InitConsumer() {
-  fd_ = shm_open("/test_channel", O_RDONLY, 0666);
+  fd_ = shm_open("/test_channel", O_RDONLY, 0);
   if (fd_ < 0) return false;
 
   addr_ = mmap(nullptr, kShmSize, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
@@ -39,8 +39,8 @@ bool RingBuffer::InitConsumer() {
   header_ = static_cast<Header*>(addr_);
   data_ = static_cast<std::uint8_t*>(addr_) + kDataOffset;
 
-  sem_empty_ = sem_open("/test_empty", 0, 0666, 0);
-  sem_full_ = sem_open("/test_full", 0, 0666, 0);
+  sem_empty_ = sem_open("/test_empty", 0, 0, 0);
+  sem_full_ = sem_open("/test_full", 0, 0, 0);
   return sem_empty_ && sem_full_;
 }
 

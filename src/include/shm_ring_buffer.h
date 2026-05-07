@@ -1,4 +1,5 @@
 #pragma once
+
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -36,4 +37,5 @@ class RingBuffer {
   void* sem_empty_ = nullptr;
   void* sem_full_ = nullptr;
 };
+
 }  // namespace shm

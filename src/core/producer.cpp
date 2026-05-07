@@ -56,8 +56,10 @@ int main(int argc, char** argv) {
     const auto count = std::min(packet::kMaxFloatPerChunk,
                                 static_cast<std::uint32_t>(input.size()) -
                                     seq * packet::kMaxFloatPerChunk);
-    quantizer.Encode({input.data() + seq * packet::kMaxFloatPerChunk, count},
-                     {encoded.data(), count});
+    quantizer.Encode(
+        std::span<const float>{input.data() + seq * packet::kMaxFloatPerChunk,
+                               count},
+        std::span<std::int16_t>{encoded.data(), count});
 
     packet::ChunkHeader hdr{msg_id, seq, total_chunks,
                             static_cast<uint16_t>(count * 2)};
@@ -65,13 +67,15 @@ int main(int argc, char** argv) {
     memcpy(item + packet::kHeaderSize, encoded.data(), count * sizeof(int16_t));
 
     comp_bytes += packet::kHeaderSize + count * sizeof(int16_t);
-    ring.Push({reinterpret_cast<std::uint8_t*>(item), packet::kItemSize});
+    ring.Push(std::span<const std::uint8_t>{
+        reinterpret_cast<const std::uint8_t*>(item), packet::kItemSize});
   }
 
   // Отправляем маркер окончания передачи
   packet::ChunkHeader eof{0, 0, 0, 0, 0xFFFF};
   memcpy(item, &eof, packet::kHeaderSize);
-  ring.Push({reinterpret_cast<std::uint8_t*>(item), packet::kHeaderSize});
+  ring.Push(std::span<const std::uint8_t>{
+      reinterpret_cast<const std::uint8_t*>(item), packet::kHeaderSize});
 
   std::cout << "Producer: " << timer.ElapsedMillis() << "ms, ratio: "
             << metrics::CompressionRatio(orig_bytes, comp_bytes) << "\n";
