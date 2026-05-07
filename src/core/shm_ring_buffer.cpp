@@ -6,11 +6,11 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include <cstring>
 #include <cerrno>
+#include <cstring>
 #include <iostream>
-#include <string_view>
 #include <string>
+#include <string_view>
 
 namespace shm {
 
@@ -20,7 +20,8 @@ constexpr mode_t kSemPermissions = S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH;
 
 // Вспомогательный вывод ошибки
 void print_err(const char* where, int err = errno) {
-  std::cerr << "Error in " << where << ": " << strerror(err) << " (" << err << ")\n";
+  std::cerr << "Error in " << where << ": " << strerror(err) << " (" << err
+            << ")\n";
 }
 
 RingBuffer::RingBuffer() noexcept = default;
@@ -57,7 +58,8 @@ bool RingBuffer::InitProducer() noexcept {
   header_->magic = 0xDEADBEEF;
 
   // Создаём именованные семафоры empty / full
-  sem_empty_ = sem_open("/test_empty", O_CREAT, kSemPermissions, header_->capacity);
+  sem_empty_ =
+      sem_open("/test_empty", O_CREAT, kSemPermissions, header_->capacity);
   if (sem_empty_ == SEM_FAILED) {
     print_err("Producer sem_open /test_empty");
     Cleanup();
