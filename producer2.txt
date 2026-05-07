@@ -1,0 +1,122 @@
+#include <algorithm>
+#include <cstring>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <thread>
+#include <vector>
+
+#include "../include/compressor.h"
+#include "../include/metrics.h"
+#include "../include/packet.h"
+#include "../include/shm_ring_buffer.h"
+
+inline bool ReadFloatFile(const std::string& filename,
+                          std::vector<float>* data) {
+  std::ifstream file(filename, std::ios::binary);
+  if (!file) {
+    std::cerr << "Error opening file: " << filename << std::endl;
+    return false;
+  }
+  data->clear();
+  float value;
+  while (file.read(reinterpret_cast<char*>(&value), sizeof(float))) {
+    data->push_back(value);
+  }
+  return true;
+}
+
+int main(int argc, char** argv) {
+  if (argc < 2) {
+    std::cerr << "Usage: producer <input.bin>\n";
+    return 1;
+  }
+
+  std::vector<float> input;
+  if (!ReadFloatFile(argv[1], &input)) {
+    return 1;
+  }
+
+  metrics::Timer timer;
+  shm::RingBuffer ring;
+
+  // Очистка старых ресурсов перед запуском на случай, если предыдущий запуск завершился аварийно.
+  ring.Cleanup();
+
+  if (!ring.InitProducer()) {
+    std::cerr << "Producer: Failed to initialize shared memory.\n";
+    return 1;
+  }
+
+  const std::uint32_t msg_id = 0;
+  const std::uint32_t total_chunks =
+      (input.size() + packet::kMaxFloatPerChunk - 1) /
+      packet::kMaxFloatPerChunk;
+
+  codec::FloatQuantizer quantizer;
+
+  // Один буфер на весь пакет (заголовок + payload)
+  alignas(16) char item[packet::kItemSize];
+  std::vector<std::int16_t> encoded(packet::kMaxFloatPerChunk);
+
+  const std::size_t orig_bytes = input.size() * sizeof(float);
+  std::size_t comp_bytes = 0;  // Считаем только реальные данные (без паддинга)
+
+  for (std::uint32_t seq = 0; seq < total_chunks; ++seq) {
+    const auto count = std::min(packet::kMaxFloatPerChunk,
+                                static_cast<std::uint32_t>(input.size()) -
+                                    seq * packet::kMaxFloatPerChunk);
+
+    // Кодируем порцию данных
+    quantizer.Encode(
+        std::span<const float>{input.data() + seq * packet::kMaxFloatPerChunk,
+                               count},
+        std::span<std::int16_t>{encoded.data(), count});
+
+    // Формируем заголовок пакета
+    packet::ChunkHeader hdr{
+        msg_id, seq, total_chunks,
+        static_cast<std::uint16_t>(
+            count * sizeof(std::int16_t)),  // payload_len в байтах
+        0                                   // eof_flag
+    };
+
+    // Заполняем буфер: сначала заголовок, потом payload
+    std::memset(item, 0, packet::kItemSize);  // Обнуляем весь блок (паддинг)
+    std::memcpy(item, &hdr, packet::kHeaderSize);
+    std::memcpy(item + packet::kHeaderSize, encoded.data(),
+                count * sizeof(std::int16_t));
+
+    comp_bytes += packet::kHeaderSize + count * sizeof(std::int16_t);
+
+    // Отправляем блок в кольцевой буфер
+    if (!ring.Push(std::span<const std::uint8_t>{
+            reinterpret_cast<const std::uint8_t*>(item), packet::kItemSize})) {
+      std::cerr << "Producer Error: Failed to push data chunk!\n";
+      ring.Cleanup();  // Очистка при ошибке
+      return 1;
+    }
+  }
+
+  // Отправляем EOF-пакет (тоже полный kItemSize)
+  packet::ChunkHeader eof{0, 0, 0, 0, 0xFFFF};
+  std::memset(item, 0, packet::kItemSize);  // Обнуляем блок для EOF
+  std::memcpy(item, &eof, packet::kHeaderSize);
+
+  if (!ring.Push(std::span<const std::uint8_t>{
+          reinterpret_cast<const std::uint8_t*>(item), packet::kItemSize})) {
+    std::cerr << "Producer Error: Failed to push EOF marker!\n";
+    ring.Cleanup();
+    return 1;
+  }
+
+  // Выводим метрики сжатия
+  double ratio = metrics::CompressionRatio(orig_bytes, comp_bytes);
+
+  std::cout << "Producer: " << timer.ElapsedMillis()
+            << "ms, ratio: " << std::fixed << std::setprecision(3) << ratio
+            << "\n";
+
+  ring.Cleanup();
+  return 0;
+}

@@ -1,0 +1,135 @@
+#include <algorithm>
+#include <cstring>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <unordered_map>
+#include <vector>
+
+#include "../include/compressor.h"
+#include "../include/metrics.h"
+#include "../include/packet.h"
+#include "../include/shm_ring_buffer.h"
+
+inline bool WriteFloatFile(const std::string& filename,
+                           const std::vector<float>& data) {
+  std::ofstream file(filename, std::ios::binary);
+  if (!file) {
+    std::cerr << "Error creating file: " << filename << std::endl;
+    return false;
+  }
+  file.write(reinterpret_cast<const char*>(data.data()),
+             data.size() * sizeof(float));
+  return true;
+}
+
+int main(int argc, char** argv) {
+  if (argc < 3) {
+    std::cerr << "Usage: consumer <original.bin> <output.bin>\n";
+    return 1;
+  }
+
+  // Читаем оригинал для подсчета размера и метрики loss
+  std::vector<float> original;
+  {
+    std::ifstream file(argv[1], std::ios::binary);
+    if (!file) {
+      std::cerr << "Error opening file: " << argv[1] << std::endl;
+      return 1;
+    }
+    float value;
+    while (file.read(reinterpret_cast<char*>(&value), sizeof(float))) {
+      original.push_back(value);
+    }
+  }
+
+  metrics::Timer timer;
+  shm::RingBuffer ring;
+  if (!ring.InitConsumer()) {
+    std::cerr << "Consumer Error: Failed to initialize shared memory.\n";
+    return 1;
+  }
+
+  codec::FloatQuantizer quantizer;
+
+  // Буфер для приема данных из SHM (один блок)
+  alignas(16) char item[packet::kItemSize];
+
+  // Буфер для финального результата (размер оригинала)
+  std::vector<float> output(original.size());
+
+  bool success = true;
+  std::size_t total_written = 0;  // Счетчик записанных байт
+
+  while (success && total_written < original.size() * sizeof(float)) {
+    if (!ring.Pop(std::span<std::uint8_t>{reinterpret_cast<std::uint8_t*>(item),
+                                          packet::kItemSize})) {
+      std::cerr << "Consumer Error: Failed to pop data from buffer!\n";
+      success = false;
+      break;
+    }
+
+    packet::ChunkHeader hdr;
+    std::memcpy(&hdr, item, packet::kHeaderSize);
+
+    // Проверка на EOF пакет
+    if (hdr.eof_flag == 0xFFFF) {
+      break;
+    }
+
+    const std::size_t payload_size = hdr.payload_len;  // Размер в байтах
+    if (payload_size == 0 ||
+        payload_size > packet::kItemSize - packet::kHeaderSize) {
+      std::cerr << "Consumer Error: Invalid payload_len\n";
+      success = false;
+      break;
+    }
+
+    // Декодируем int16_t во float
+    const std::span<const std::int16_t> payload{
+        reinterpret_cast<const std::int16_t*>(item + packet::kHeaderSize),
+        payload_size / sizeof(std::int16_t)};
+
+    std::vector<float> decoded(payload.size());
+    quantizer.Decode(payload, std::span<float>{decoded});
+
+    // Вычисляем смещение в итоговом файле (в байтах)
+    const std::size_t offset_bytes =
+        hdr.chunk_seq * packet::kMaxFloatPerChunk * sizeof(float);
+    const std::size_t remaining_bytes =
+        original.size() * sizeof(float) - offset_bytes;
+
+    // Сколько байт мы можем записать в этом чанке, чтобы не выйти за границы
+    // файла
+    const std::size_t write_bytes = std::min(payload_size, remaining_bytes);
+    const std::size_t write_count = write_bytes / sizeof(float);
+
+    // Копируем декодированные данные в итоговый буфер по нужному смещению
+    std::memcpy(output.data() + offset_bytes / sizeof(float), decoded.data(),
+                write_count * sizeof(float));
+
+    total_written += write_bytes;
+
+    // Если записали все данные, выходим
+    if (total_written >= original.size() * sizeof(float)) {
+      break;
+    }
+  }
+
+  // Обрезаем output до точного размера оригинала (на случай, если последний
+  // чанк был больше)
+  output.resize(original.size());
+
+  WriteFloatFile(argv[2], output);
+
+  double loss_percent =
+      metrics::LossPercent(original.data(), output.data(), original.size());
+
+  std::cout << "Consumer: " << timer.ElapsedMillis()
+            << "ms, loss: " << std::fixed << std::setprecision(2)
+            << loss_percent << "%\n";
+
+  ring.Cleanup();
+
+  return success ? 0 : 1;
+}
