@@ -24,12 +24,13 @@ mkdir build && cd build
 if [[ "$COMPILER" == "clang++" ]]; then
   cmake -DCMAKE_CXX_COMPILER=clang++ \
         -DCMAKE_CXX_STANDARD=20 \
-        -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=ld.lld" \
+        -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=$(which ld.lld)" \
         ..
 else
   cmake -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_STANDARD=20 ..
 fi
 
-make -j$(nproc)
+#make -j$(nproc)
+LD_LLD_PATH="$(which ld.lld)" make -j$(nproc)
 
 echo "SUCCESS!"
