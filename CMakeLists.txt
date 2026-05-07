@@ -4,12 +4,8 @@ project(TestTask LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
-  add_compile_options(-Wall -Wextra -Wpedantic -march=native)
-  add_link_options("-fuse-ld=ld.lld")
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  add_compile_options(-Wall -Wextra -Wpedantic -march=native)
-endif()
+add_compile_options(-Wall -Wextra -Wpedantic -march=native)
+add_link_options(-fuse-ld=lld)
 
 # 1. Создаем статическую библиотеку из общего кода (ядра проекта) Это позволяет и
 #   producer/consumer, и тестам использовать одну реализацию.

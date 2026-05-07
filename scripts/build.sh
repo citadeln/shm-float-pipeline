@@ -1,36 +1,17 @@
 #!/bin/bash
 set -e
 
-OS_TYPE=$(uname -s)
-
-if [[ "$OS_TYPE" == "Linux" ]]; then
-  DISTRO=$(lsb_release -si 2>/dev/null || echo "Unknown")
-  if [[ "$DISTRO" == "LinuxMint" || "$DISTRO" == "Ubuntu" || "$DISTRO" == "Debian" ]]; then
-    echo "Detected Debian-based ($DISTRO). Clang ready."
-    COMPILER="clang++"
-  else
-    echo "Using g++ for $DISTRO"
-    COMPILER="g++"
-  fi
-fi
-
 PROJ_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../" && pwd)"
 cd "$PROJ_ROOT"
 
-echo "Building with $COMPILER..."
+echo "Building for Debian (Clang + LLD)..."
 rm -rf build
 mkdir build && cd build
 
-if [[ "$COMPILER" == "clang++" ]]; then
-  cmake -DCMAKE_CXX_COMPILER=clang++ \
-        -DCMAKE_CXX_STANDARD=20 \
-        -DCMAKE_EXE_LINKER_FLAGS="-fuse-ld=$(which ld.lld)" \
-        ..
-else
-  cmake -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_STANDARD=20 ..
-fi
+export ld=$(which ld.lld)
 
-#make -j$(nproc)
-LD_LLD_PATH="$(which ld.lld)" make -j$(nproc)
+cmake -DCMAKE_CXX_COMPILER=g++ -DCMAKE_CXX_STANDARD=20 ..
+
+make -j$(nproc)
 
 echo "SUCCESS!"

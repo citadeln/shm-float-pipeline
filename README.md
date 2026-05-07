@@ -20,11 +20,13 @@
 
 ### Зависимости
 
-- Компилятор C++20 (`g++` или `clang++`).
+- Debian-based OS
+- Компилятор C++20 (`clang++`).
 - `libpthread` (POSIX threads).
 - `librt` (для `mmap`/`mlock` и семафоров, где требуется).
 - CMake ≥ 3.16.
 - Google Test (для `tests/test_utils`).
+- LLD.
 
 ## Сборка проекта
 ```bash
