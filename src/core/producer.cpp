@@ -1,6 +1,9 @@
+#include <chrono>
 #include <cstring>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
+#include <thread>
 #include <vector>
 
 #include "../include/compressor.h"
@@ -38,7 +41,22 @@ int main(int argc, char** argv) {
   metrics::Timer timer;
   shm::RingBuffer ring;
   if (!ring.InitProducer()) {
+    std::cerr << "Producer: Failed to initialize shared memory.\n";
     return 1;
+  }
+
+  // ОЖИДАНИЕ ПОТРЕБИТЕЛЯ
+  // Производитель ждет, пока Потребитель откроет семафор /test_full.
+  // Это синхронизирует запуск процессов.
+  int wait_count = 0;
+  while (ring.GetFullSemaphore() == nullptr) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    wait_count += 100;
+    if (wait_count > 5000) {  // Таймаут 5 секунд
+      std::cerr << "Producer Error: Consumer did not start in time!\n";
+      ring.Cleanup();
+      return 1;
+    }
   }
 
   const std::uint32_t msg_id = 0;
@@ -71,15 +89,24 @@ int main(int argc, char** argv) {
         reinterpret_cast<const std::uint8_t*>(item), packet::kItemSize});
   }
 
-  // Отправляем маркер окончания передачи
+  // Отправляем маркер окончания передачи с проверкой результата
   packet::ChunkHeader eof{0, 0, 0, 0, 0xFFFF};
   memcpy(item, &eof, packet::kHeaderSize);
-  ring.Push(std::span<const std::uint8_t>{
-      reinterpret_cast<const std::uint8_t*>(item), packet::kHeaderSize});
+
+  if (!ring.Push(std::span<const std::uint8_t>{
+          reinterpret_cast<const std::uint8_t*>(item), packet::kHeaderSize})) {
+    std::cerr << "Producer Error: Failed to push EOF marker!\n";
+    ring.Cleanup();
+    return 1;
+  }
+
+  // Форматированный вывод времени и ratio
+  double ratio = metrics::CompressionRatio(orig_bytes, comp_bytes);
 
   std::cout << "Producer: " << timer.ElapsedMillis() << "ms, ratio: "
-            << metrics::CompressionRatio(orig_bytes, comp_bytes) << "\n";
+            << std::fixed  // Фиксированная точка (не научная нотация)
+            << std::setprecision(3)  // Точность до тысячных (0.500)
+            << ratio << "\n";
 
-  ring.Cleanup();
   return 0;
 }

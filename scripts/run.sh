@@ -1,6 +1,23 @@
 #!/bin/bash
 
+set -e
+
 cd build
 ./producer ../data/sample.bin & 
+producer_pid=$! # Сохраняем ID процесса Producer, чтобы потом его "убить"
+echo "Producer запущен с PID: $producer_pid"
+
+# Даем Producer секунду на запуск и инициализацию семафоров
 sleep 1
+
+# Запускаем Consumer (он дождется Producer и считает данные)
 ./consumer ../data/sample.bin ../data/output.bin
+
+# Ждем завершения фонового процесса Producer (на всякий случай)
+wait $producer_pid 2>/dev/null || true
+
+echo "--- ЗАПУСК ЮНИТ-ТЕСТОВ ---"
+./../tests/test_utils
+# ctest
+
+echo "--- СКРИПТ ЗАВЕРШЕН УСПЕШНО ---"

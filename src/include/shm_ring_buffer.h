@@ -27,6 +27,7 @@ class RingBuffer {
   [[nodiscard]] bool Push(std::span<const std::uint8_t> item) noexcept;
   [[nodiscard]] bool Pop(std::span<std::uint8_t> item) noexcept;
   void Cleanup() noexcept;
+  void* GetFullSemaphore() const noexcept;
 
  private:
   int fd_ = -1;

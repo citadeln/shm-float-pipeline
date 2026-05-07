@@ -1,5 +1,4 @@
-#ifndef COMPRESSED_SHM_CHANNEL_COMPRESSOR_H_
-#define COMPRESSED_SHM_CHANNEL_COMPRESSOR_H_
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -36,5 +35,3 @@ class FloatQuantizer {
 };
 
 }  // namespace codec
-
-#endif  // COMPRESSED_SHM_CHANNEL_COMPRESSOR_H_

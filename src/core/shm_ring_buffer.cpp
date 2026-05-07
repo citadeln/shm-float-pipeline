@@ -139,4 +139,5 @@ void RingBuffer::Cleanup() noexcept {
   shm_unlink("/test_channel");
 }
 
+void* RingBuffer::GetFullSemaphore() const noexcept { return sem_full_; }
 }  // namespace shm

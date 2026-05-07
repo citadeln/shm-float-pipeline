@@ -1,5 +1,4 @@
-#ifndef PROJECT_METRICS_H_
-#define PROJECT_METRICS_H_
+#pragma once
 
 #include <chrono>
 #include <cstddef>
@@ -25,5 +24,3 @@ double LossPercent(const float* original, const float* reconstructed,
                    std::size_t count);
 
 }  // namespace metrics
-
-#endif  // PROJECT_METRICS_H_
