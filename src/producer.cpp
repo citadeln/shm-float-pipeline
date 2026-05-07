@@ -1,4 +1,5 @@
-#include <fstream>  // Добавлено для работы с файлами
+#include <cstring>
+#include <fstream>
 #include <iostream>
 #include <vector>
 
@@ -15,26 +16,10 @@ inline bool ReadFloatFile(const std::string& filename,
     std::cerr << "Error opening file: " << filename << std::endl;
     return false;
   }
-
   data->clear();
   float value;
   while (file.read(reinterpret_cast<char*>(&value), sizeof(float))) {
     data->push_back(value);
-  }
-  return true;
-}
-
-// Чтение float-файлов
-inline bool WriteFloatFile(const std::string& filename,
-                           const std::vector<float>& data) {
-  std::ofstream file(filename, std::ios::binary);
-  if (!file) {
-    std::cerr << "Error creating file: " << filename << std::endl;
-    return false;
-  }
-
-  for (float value : data) {
-    file.write(reinterpret_cast<const char*>(&value), sizeof(float));
   }
   return true;
 }
@@ -50,50 +35,48 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  metrics::Metrics metrics;
-  metrics.Start();
-
-  shm::ShmRingBuffer ring;
+  metrics::Timer timer;
+  shm::RingBuffer ring;
   if (!ring.InitProducer()) {
     return 1;
   }
 
-  // Producer логика: chunking + compress
-  std::uint32_t msg_id = 0;
-  std::uint32_t total_chunks = (input.size() + packet::kMaxFloatPerChunk - 1) /
-                               packet::kMaxFloatPerChunk;
+  const std::uint32_t msg_id = 0;
+  const std::uint32_t total_chunks =
+      (input.size() + packet::kMaxFloatPerChunk - 1) /
+      packet::kMaxFloatPerChunk;
   codec::FloatQuantizer quantizer;
 
-  alignas(16) char item[256];
+  alignas(16) char item[packet::kItemSize];
   std::vector<std::int16_t> encoded(packet::kMaxFloatPerChunk);
-  std::size_t orig_bytes = input.size() * 4;
+  const std::size_t orig_bytes = input.size() * sizeof(float);
   std::size_t comp_bytes = 0;
 
   for (std::uint32_t seq = 0; seq < total_chunks; ++seq) {
-    auto count = std::min(packet::kMaxFloatPerChunk,
-                          input.size() - seq * packet::kMaxFloatPerChunk);
+    const auto count = std::min(packet::kMaxFloatPerChunk,
+                                static_cast<std::uint32_t>(input.size()) -
+                                    seq * packet::kMaxFloatPerChunk);
     quantizer.Encode({input.data() + seq * packet::kMaxFloatPerChunk, count},
-                     encoded);
+                     {encoded.data(), count});
 
-    packet::ChunkHeader hdr{msg_id, seq, total_chunks, count * 2};
-    std::memcpy(item, &hdr, packet::kHeaderSize);
-    std::memcpy(item + packet::kHeaderSize, encoded.data(), count * 2);
+    packet::ChunkHeader hdr{msg_id, seq, total_chunks,
+                            static_cast<uint16_t>(count * 2)};
+    memcpy(item, &hdr, packet::kHeaderSize);
+    memcpy(item + packet::kHeaderSize, encoded.data(),
+           count * sizeof(int16_t));
 
-    comp_bytes += packet::kHeaderSize + count * 2;
+    comp_bytes += packet::kHeaderSize + count * sizeof(int16_t);
     ring.Push({reinterpret_cast<std::uint8_t*>(item), packet::kItemSize});
-
-    // Завершаем передачу пустым пакетом
-    if (seq == total_chunks - 1) {
-      packet::ChunkHeader eof{0, 0, 0, 0, 0xFFFF};
-      std::memcpy(item, &eof, packet::kHeaderSize);
-      ring.Push({reinterpret_cast<std::uint8_t*>(item), packet::kHeaderSize});
-    }
   }
 
-  auto ms = metrics.ElapsedMs();
-  std::cout << "Producer: " << ms
-            << "ms, ratio: " << metrics.CompressionRatio(orig_bytes, comp_bytes)
-            << "\n";
+  // Отправляем маркер окончания передачи
+  packet::ChunkHeader eof{0, 0, 0, 0, 0xFFFF};
+  memcpy(item, &eof, packet::kHeaderSize);
+  ring.Push({reinterpret_cast<std::uint8_t*>(item), packet::kHeaderSize});
+
+  std::cout << "Producer: " << timer.ElapsedMillis() << "ms, ratio: "
+            << metrics::CompressionRatio(orig_bytes, comp_bytes)
+            << "\n"; 
 
   ring.Cleanup();
   return 0;

@@ -1,3 +1,4 @@
+#include <cstring>
 #include <fstream>
 #include <iostream>
 #include <unordered_map>
@@ -8,23 +9,6 @@
 #include "../include/packet.h"
 #include "../include/shm_ring_buffer.h"
 
-// Чтение float-файлов
-inline bool ReadFloatFile(const std::string& filename,
-                          std::vector<float>* data) {
-  std::ifstream file(filename, std::ios::binary);
-  if (!file) {
-    std::cerr << "Error opening file: " << filename << std::endl;
-    return false;
-  }
-
-  data->clear();
-  float value;
-  while (file.read(reinterpret_cast<char*>(&value), sizeof(float))) {
-    data->push_back(value);
-  }
-  return true;
-}
-
 // Запись float-файлов
 inline bool WriteFloatFile(const std::string& filename,
                            const std::vector<float>& data) {
@@ -33,7 +17,6 @@ inline bool WriteFloatFile(const std::string& filename,
     std::cerr << "Error creating file: " << filename << std::endl;
     return false;
   }
-
   for (float value : data) {
     file.write(reinterpret_cast<const char*>(&value), sizeof(float));
   }
@@ -47,32 +30,40 @@ int main(int argc, char** argv) {
   }
 
   std::vector<float> original;
-  ReadFloatFile(argv[1], &original);
+  {
+    std::ifstream file(argv[1], std::ios::binary);
+    if (!file) {
+      std::cerr << "Error opening file: " << argv[1] << std::endl;
+      return 1;
+    }
+    float value;
+    while (file.read(reinterpret_cast<char*>(&value), sizeof(float))) {
+      original.push_back(value);
+    }
+  }
 
-  metrics::Metrics metrics;
-  metrics.Start();
-
-  shm::ShmRingBuffer ring;
+  metrics::Timer timer;
+  shm::RingBuffer ring;
   if (!ring.InitConsumer()) return 1;
 
   codec::FloatQuantizer quantizer;
   std::unordered_map<std::uint32_t, std::vector<float>> reassembly;
   std::vector<std::int16_t> encoded(packet::kMaxFloatPerChunk);
-
-  alignas(16) char item[256];
+  alignas(16) char item[packet::kItemSize];
   packet::ChunkHeader hdr;
 
   while (true) {
     ring.Pop({reinterpret_cast<std::uint8_t*>(item), packet::kItemSize});
-    std::memcpy(&hdr, item, packet::kHeaderSize);
+    memcpy(&hdr, item, packet::kHeaderSize);
 
     if (hdr.eof_flag == 0xFFFF) break;
 
     std::span<std::int16_t> payload{
         reinterpret_cast<std::int16_t*>(item + packet::kHeaderSize),
-        hdr.payload_len};
-    std::vector<float> decoded(hdr.payload_len);
-    quantizer.Decode(payload, decoded);
+        static_cast<std::size_t>(hdr.payload_len / 2)};
+
+    std::vector<float> decoded(payload.size());
+    quantizer.Decode(payload, {decoded.data(), decoded.size()});
 
     auto& msg = reassembly[hdr.msg_id];
     msg.resize(hdr.total_chunks * packet::kMaxFloatPerChunk);
@@ -80,19 +71,17 @@ int main(int argc, char** argv) {
               msg.begin() + hdr.chunk_seq * packet::kMaxFloatPerChunk);
   }
 
-  // Объединяем все сообщения в выходной вектор
   std::vector<float> output;
   for (auto& [id, chunks] : reassembly) {
     output.insert(output.end(), chunks.begin(), chunks.end());
   }
 
   WriteFloatFile(argv[2], output);
+  std::cout << "Consumer: " << timer.ElapsedMillis() << "ms, loss: "
+            << metrics::LossPercent(original.data(), output.data(),
+                                    original.size())
+            << "%\n";
 
-  auto ms = metrics.ElapsedMs();
-  double loss =
-      metrics.LossPercent(original.data(), output.data(), original.size());
-  std::cout << "Consumer: " << ms << "ms, loss: " << loss << "%\n";
-
-  ring.Close();
+  ring.Cleanup();
   return 0;
 }
