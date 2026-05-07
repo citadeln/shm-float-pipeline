@@ -47,7 +47,6 @@ int main(int argc, char** argv) {
 
   // ОЖИДАНИЕ ПОТРЕБИТЕЛЯ
   // Производитель ждет, пока Потребитель откроет семафор /test_full.
-  // Это синхронизирует запуск процессов.
   int wait_count = 0;
   while (ring.GetFullSemaphore() == nullptr) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -85,8 +84,14 @@ int main(int argc, char** argv) {
     memcpy(item + packet::kHeaderSize, encoded.data(), count * sizeof(int16_t));
 
     comp_bytes += packet::kHeaderSize + count * sizeof(int16_t);
-    ring.Push(std::span<const std::uint8_t>{
-        reinterpret_cast<const std::uint8_t*>(item), packet::kItemSize});
+
+    if (!ring.Push(std::span<const std::uint8_t>{
+            reinterpret_cast<const std::uint8_t*>(item),
+            packet::kHeaderSize})) {
+      std::cerr << "Producer Error: Failed to push data chunk!\n";
+      ring.Cleanup();
+      return 1;
+    }
   }
 
   // Отправляем маркер окончания передачи с проверкой результата
@@ -103,8 +108,8 @@ int main(int argc, char** argv) {
   // Форматированный вывод времени и ratio
   double ratio = metrics::CompressionRatio(orig_bytes, comp_bytes);
 
-  std::cout << "Producer: " << timer.ElapsedMillis() << "ms, ratio: "
-            << std::fixed  // Фиксированная точка (не научная нотация)
+  std::cout << "Producer: " << timer.ElapsedMillis()
+            << "ms, ratio: " << std::fixed
             << std::setprecision(3)  // Точность до тысячных (0.500)
             << ratio << "\n";
 
